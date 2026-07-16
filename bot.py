@@ -104,24 +104,41 @@ def telegram_listener():
         except:
             time.sleep(5)
 
-# ==================== 감시 루프 ====================
+# ==================== 감시 루프 (5초 + 2% 버전) ====================
 def monitoring_loop():
-    print("🚀 주식 감시 시작")
+    print("🚀 주식 감시 시작 (5초 간격, 변동률 2% 이상)")
+    last_alert = {}  # 마지막 알림 시간 기록
+
     while True:
         try:
             token = get_valid_token()
             for name, ticker in list(stocks.items()):
                 current_p, open_p = get_market_data(token, ticker)
-                if open_p == 0: continue
+                if open_p == 0: 
+                    continue
+
                 change = (current_p - open_p) / open_p * 100
-                if abs(change) >= 1.0:
-                    dir_str = "🔺" if change > 0 else "🔻"
-                    send_telegram(f"{dir_str} {name} {current_p:,}원 ({change:+.2f}%)")
-            time.sleep(3)
+
+                # 변동률 2% 이상일 때만 알림
+                if abs(change) >= 2.0:
+                    key = f"{name}_{int(change)}"
+                    now = time.time()
+
+                    # 같은 레벨 알림은 5분에 한 번만
+                    if key not in last_alert or now - last_alert[key] > 300:
+                        dir_str = "🔺 상승" if change > 0 else "🔻 하락"
+                        send_telegram(f"{dir_str} 알림!\n<b>{name}</b>\n현재가: {current_p:,}원\n변동률: {change:+.2f}%")
+                        last_alert[key] = now
+
+                # 목표가 알림 (5분에 한 번)
+                if name in targets and current_p >= targets[name]:
+                    t_key = f"target_{name}"
+                    if t_key not in last_alert or time.time() - last_alert[t_key] > 300:
+                        send_telegram(f"🎯 목표가 도달!\n{name} {current_p:,}원 (목표: {targets[name]:,}원)")
+                        last_alert[t_key] = time.time()
+
+            time.sleep(5)   # 5초 간격
+
         except Exception as e:
             print(f"오류: {e}")
             time.sleep(10)
-
-if __name__ == "__main__":
-    Thread(target=telegram_listener, daemon=True).start()
-    monitoring_loop()
