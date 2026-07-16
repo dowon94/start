@@ -7,11 +7,10 @@ from threading import Thread
 from difflib import get_close_matches
 
 # ==================== 설정 ====================
-APP_KEY = os.getenv("PSju3LP86B9wy64ks1kNE8Hqk9xOsctaOdnt")
-APP_SECRET = os.getenv("jBCuOUWj2/EDMyk4QsF38j9AWNwHVb1z09gm19S4FAoQEyz78cVV3jeJWR5YdZbshwtJOBaGzFjwdyIqxN2lXdGzDCDBdh3JdFYwh8yZHagpBDmAu9e5E2l/m84ikcfOMu1KppBD/Jub8RF+xAEQOWHMGztr6Q440DYRwrEX0/UclWyykeg=
-")
-TELEGRAM_TOKEN = os.getenv("7692250924:AAGF39wQneTrVX0wHJIbEkCfOn7jc1K3aTs")
-CHAT_ID = os.getenv("581210065")
+APP_KEY = os.getenv("APP_KEY")
+APP_SECRET = os.getenv("APP_SECRET")
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+CHAT_ID = os.getenv("CHAT_ID")
 URL = "https://openapi.koreainvestment.com:9443"
 
 DATA_FILE = "stock_monitor.json"
