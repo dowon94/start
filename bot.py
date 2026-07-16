@@ -98,22 +98,22 @@ def telegram_listener():
                                       "/add 이름\n"
                                       "/remove 이름\n"
                                       "/target 이름 가격\n"
-                                      "/threshold 숫자 (예: 1.5)\n"
-                                      "/interval 초 (예: 10)\n"
-                                      "/status\n"
+                                      "/변동률 숫자 (예: /변동률 1.5)\n"
+                                      "/간격 초 (예: /간격 10)\n"
+                                      "/상태\n"
                                       "/list")
 
-                    elif text.startswith('/add '):
-                        name = text[5:].strip()
+                    elif text.startswith(('/add ', '/추가 ')):
+                        name = text.split(maxsplit=1)[1].strip()
                         matched, code = find_ticker_by_name(name)
                         if code:
                             stocks[matched] = code
                             save_data({"stocks": stocks, "targets": targets})
                             send_telegram(f"✅ {matched} 추가 완료!")
                         else:
-                            send_telegram(f"❌ '{name}' 종목을 찾을 수 없습니다.")
+                            send_telegram(f"❌ '{name}'을(를) 찾을 수 없습니다.")
 
-                    elif text.startswith(('/remove ', '/del ')):
+                    elif text.startswith(('/remove ', '/del ', '/삭제 ')):
                         name = text.split(maxsplit=1)[1].strip()
                         if name in stocks:
                             del stocks[name]
@@ -121,36 +121,36 @@ def telegram_listener():
                             save_data({"stocks": stocks, "targets": targets})
                             send_telegram(f"🗑 {name} 삭제 완료")
                         else:
-                            send_telegram("❌ 목록에 없습니다.")
+                            send_telegram("❌ 목록에 없는 종목입니다.")
 
-                    elif text.startswith('/target '):
-                        parts = text[8:].strip().split()
-                        if len(parts) >= 2 and parts[0] in stocks:
+                    elif text.startswith(('/target ', '/목표가 ')):
+                        parts = text.split(maxsplit=2)
+                        if len(parts) >= 3 and parts[1] in stocks:
                             try:
-                                price = int(parts[1].replace(',', ''))
-                                targets[parts[0]] = price
+                                price = int(parts[2].replace(',', ''))
+                                targets[parts[1]] = price
                                 save_data({"stocks": stocks, "targets": targets})
-                                send_telegram(f"🎯 {parts[0]} 목표가 {price:,}원 설정")
+                                send_telegram(f"🎯 {parts[1]} 목표가 {price:,}원 설정 완료")
                             except:
-                                send_telegram("❌ 가격을 숫자로 입력하세요.")
+                                send_telegram("❌ /target 이름 가격 형식으로 입력")
 
-                    elif text.startswith('/threshold '):
+                    elif text.startswith(('/변동률 ', '/threshold ')):
                         try:
                             global alert_threshold
                             alert_threshold = float(text.split()[1])
-                            send_telegram(f"📊 변동률 기준을 {alert_threshold}%로 변경했습니다.")
+                            send_telegram(f"📊 변동률 알림 기준을 **{alert_threshold}%**로 변경했습니다.")
                         except:
-                            send_telegram("❌ /threshold 1.5 처럼 숫자로 입력")
+                            send_telegram("❌ /변동률 1.5 형식으로 입력")
 
-                    elif text.startswith('/interval '):
+                    elif text.startswith(('/간격 ', '/interval ')):
                         try:
                             global check_interval
                             check_interval = int(text.split()[1])
-                            send_telegram(f"⏱ 체크 간격을 {check_interval}초로 변경했습니다.")
+                            send_telegram(f"⏱ 체크 간격을 **{check_interval}초**로 변경했습니다.")
                         except:
-                            send_telegram("❌ /interval 10 처럼 숫자로 입력")
+                            send_telegram("❌ /간격 10 형식으로 입력")
 
-                    elif text == '/status':
+                    elif text in ['/상태', '/status']:
                         send_telegram(f"📈 <b>현재 설정</b>\n"
                                       f"변동률 기준: {alert_threshold}%\n"
                                       f"체크 간격: {check_interval}초\n"
@@ -160,13 +160,13 @@ def telegram_listener():
                         msg = "📋 감시 종목:\n" + "\n".join([f"• {n} ({c})" for n, c in stocks.items()])
                         send_telegram(msg)
 
-        except Exception as e:
+        except:
             time.sleep(5)
 
 # ==================== 감시 루프 ====================
 def monitoring_loop():
     global alert_threshold, check_interval
-    print(f"🚀 감시 시작 (기준 {alert_threshold}%, {check_interval}초 간격)")
+    print(f"🚀 감시 시작 (변동률 {alert_threshold}%, {check_interval}초 간격)")
     last_alert = {}
 
     while True:
