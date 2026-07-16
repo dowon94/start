@@ -1,23 +1,25 @@
 import requests
 import json
 import time
-import datetime
 import os
+from datetime import datetime, date, time as dtime
 from threading import Thread
 from difflib import get_close_matches
+from zoneinfo import ZoneInfo
 
 # ==================== 설정 ====================
 APP_KEY = os.getenv("APP_KEY")
 APP_SECRET = os.getenv("APP_SECRET")
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
-URL = "https://openapi.koreainvestment.com:9443"
 
+URL = "https://openapi.koreainvestment.com:9443"
 DATA_FILE = "stock_monitor.json"
+KST = ZoneInfo("Asia/Seoul")
 
 # ==================== 설정 변수 ====================
-alert_threshold = 2.0   # 변동률 기준 (%)
-check_interval = 5      # 체크 간격 (초)
+alert_threshold = 2.0          # 변동률 기준 (%)
+check_interval = 5             # 체크 간격 (초)
 
 # ==================== 데이터 ====================
 def load_data():
@@ -44,20 +46,34 @@ data = load_data()
 stocks = data.get("stocks", {})
 targets = data.get("targets", {})
 
-# ==================== 함수 ====================
+# ==================== 유틸 함수 ====================
+def is_market_open():
+    """정규장 시간 체크 (평일 09:00 ~ 15:30)"""
+    now = datetime.now(KST)
+    if now.weekday() >= 5:  # 토, 일
+        return False
+    market_open = now.replace(hour=9, minute=0, second=0, microsecond=0)
+    market_close = now.replace(hour=15, minute=30, second=0, microsecond=0)
+    return market_open <= now <= market_close
+
 def get_access_token():
     url = f"{URL}/oauth2/tokenP"
-    body = {"grant_type": "client_credentials", "appkey": APP_KEY, "appsecret": APP_SECRET}
+    body = {
+        "grant_type": "client_credentials",
+        "appkey": APP_KEY,
+        "appsecret": APP_SECRET
+    }
     res = requests.post(url, data=json.dumps(body))
     return res.json().get('access_token')
 
 def get_valid_token():
-    if 'current_token' not in globals() or globals().get('token_issue_date') != datetime.date.today():
+    if 'current_token' not in globals() or globals().get('token_issue_date') != date.today():
         globals()['current_token'] = get_access_token()
-        globals()['token_issue_date'] = datetime.date.today()
+        globals()['token_issue_date'] = date.today()
     return globals()['current_token']
 
 def get_market_data(token, ticker):
+    """현재가 조회 (정규장 + 시간외 모두 가능)"""
     url = f"{URL}/uapi/domestic-stock/v1/quotations/inquire-price"
     headers = {
         "content-type": "application/json",
@@ -66,16 +82,28 @@ def get_market_data(token, ticker):
         "appSecret": APP_SECRET,
         "tr_id": "FHKST01010100"
     }
-    params = {"fid_cond_mrkt_div_code": "J", "fid_input_iscd": ticker}
+    params = {
+        "fid_cond_mrkt_div_code": "J",
+        "fid_input_iscd": ticker
+    }
     try:
         res = requests.get(url, headers=headers, params=params).json()['output']
-        return int(res.get('stck_prpr', 0)), int(res.get('stck_oprc', 0))
-    except:
-        return 0, 0
+        current = int(res.get('stck_prpr', 0))
+        open_p = int(res.get('stck_oprc', 0))
+        high = int(res.get('stck_hgpr', 0))
+        low = int(res.get('stck_lwpr', 0))
+        return current, open_p, high, low
+    except Exception as e:
+        print(f"시세 조회 오류 ({ticker}): {e}")
+        return 0, 0, 0, 0
 
 def send_telegram(message):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    requests.post(url, data={'chat_id': CHAT_ID, 'text': message, 'parse_mode': 'HTML'})
+    requests.post(url, data={
+        'chat_id': CHAT_ID,
+        'text': message,
+        'parse_mode': 'HTML'
+    })
 
 def find_ticker_by_name(name):
     matches = get_close_matches(name, stocks.keys(), n=3, cutoff=0.6)
@@ -83,7 +111,7 @@ def find_ticker_by_name(name):
         return matches[0], stocks[matches[0]]
     return None, None
 
-# ==================== 텔레그램 명령어 ====================
+# ==================== 텔레그램 리스너 ====================
 def telegram_listener():
     offset = 0
     print("텔레그램 리스너 시작...")
@@ -91,45 +119,40 @@ def telegram_listener():
         try:
             url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/getUpdates?offset={offset}&timeout=30"
             res = requests.get(url).json()
-
             if res.get('ok') and res.get('result'):
                 for update in res['result']:
                     offset = update['update_id'] + 1
-                    if 'message' not in update: continue
-                    if str(update['message']['chat']['id']) != CHAT_ID: continue
-                    
+                    if 'message' not in update:
+                        continue
+                    if str(update['message']['chat']['id']) != str(CHAT_ID):
+                        continue
+
                     text = update['message']['text'].strip()
 
-                    if text == '/help':
+                    if text in ['/help', '/도움말']:
                         send_telegram(
                             "📌 <b>명령어 목록</b>\n\n"
-                            "• /add 이름 코드  → 신규 종목 추가\n"
-                            "  예: /add 모나미 005360\n"
-                            "• /remove 이름    → 종목 삭제\n"
+                            "• /add 이름 코드 → 신규 종목 추가\n"
+                            "• /remove 이름 → 종목 삭제\n"
                             "• /target 이름 가격 → 목표가 설정\n"
-                            "• /변동률 숫자    → 알림 기준 변경 (예: /변동률 1.5)\n"
-                            "• /간격 초        → 체크 간격 변경 (예: /간격 10)\n"
-                            "• /상태           → 현재 설정 확인\n"
-                            "• /list           → 감시 종목 목록"
+                            "• /시세 이름  or  /가격 이름 → 현재가 조회 (시간외 포함)\n"
+                            "• /변동률 숫자 → 알림 기준 변경\n"
+                            "• /간격 초 → 체크 간격 변경\n"
+                            "• /상태 → 현재 설정 확인\n"
+                            "• /list → 감시 종목 목록"
                         )
 
-                    # ===== /add 명령어 (신규 개선) =====
                     elif text.startswith(('/add ', '/추가 ')):
                         parts = text.split(maxsplit=2)
-
-                        # 케이스 1: /add 이름 코드 (신규 종목)
                         if len(parts) >= 3:
                             name = parts[1].strip()
                             code = parts[2].strip()
-
                             if code.isdigit() and len(code) == 6:
                                 stocks[name] = code
                                 save_data({"stocks": stocks, "targets": targets})
                                 send_telegram(f"✅ {name} ({code}) 추가 완료!")
                             else:
                                 send_telegram("❌ 종목코드는 6자리 숫자여야 합니다.\n예: /add 모나미 005360")
-                        
-                        # 케이스 2: /add 이름 (기존 종목에서 찾기)
                         else:
                             name = parts[1].strip()
                             matched, code = find_ticker_by_name(name)
@@ -138,11 +161,7 @@ def telegram_listener():
                                 save_data({"stocks": stocks, "targets": targets})
                                 send_telegram(f"✅ {matched} 추가 완료!")
                             else:
-                                send_telegram(
-                                    f"❌ '{name}'을(를) 찾을 수 없습니다.\n\n"
-                                    f"신규 종목은 이렇게 추가하세요:\n"
-                                    f"<code>/add 모나미 005360</code>"
-                                )
+                                send_telegram(f"❌ '{name}'을(를) 찾을 수 없습니다.")
 
                     elif text.startswith(('/remove ', '/del ', '/삭제 ')):
                         name = text.split(maxsplit=1)[1].strip()
@@ -163,9 +182,39 @@ def telegram_listener():
                                 save_data({"stocks": stocks, "targets": targets})
                                 send_telegram(f"🎯 {parts[1]} 목표가 {price:,}원 설정 완료")
                             except:
-                                send_telegram("❌ /target 이름 가격 형식으로 입력\n예: /target 모나미 4500")
+                                send_telegram("❌ /target 이름 가격 형식으로 입력")
                         else:
                             send_telegram("❌ 종목이 없거나 형식이 틀렸습니다.")
+
+                    # ========== 시세 조회 (시간외 포함) ==========
+                    elif text.startswith(('/시세 ', '/가격 ', '/현재가 ')):
+                        name = text.split(maxsplit=1)[1].strip()
+                        matched, code = find_ticker_by_name(name)
+                        if not code and name in stocks:
+                            matched, code = name, stocks[name]
+                        
+                        if not code:
+                            send_telegram(f"❌ '{name}' 종목을 찾을 수 없습니다.")
+                            continue
+                        
+                        token = get_valid_token()
+                        current, open_p, high, low = get_market_data(token, code)
+                        
+                        if current == 0:
+                            send_telegram(f"❌ {matched} 시세 조회 실패")
+                            continue
+                        
+                        change = (current - open_p) / open_p * 100 if open_p else 0
+                        status = "🟢 정규장" if is_market_open() else "🌙 시간외"
+                        
+                        send_telegram(
+                            f"{status} <b>{matched}</b>\n\n"
+                            f"현재가: <b>{current:,}원</b>\n"
+                            f"시가: {open_p:,}원\n"
+                            f"고가: {high:,}원\n"
+                            f"저가: {low:,}원\n"
+                            f"등락률: {change:+.2f}%"
+                        )
 
                     elif text.startswith(('/변동률 ', '/threshold ')):
                         try:
@@ -184,8 +233,10 @@ def telegram_listener():
                             send_telegram("❌ /간격 10 형식으로 입력")
 
                     elif text in ['/상태', '/status']:
+                        market_status = "🟢 정규장 중" if is_market_open() else "🔴 장 마감 (알림 중단)"
                         send_telegram(
                             f"📈 <b>현재 설정</b>\n\n"
+                            f"• 장 상태: {market_status}\n"
                             f"• 변동률 기준: {alert_threshold}%\n"
                             f"• 체크 간격: {check_interval}초\n"
                             f"• 감시 종목 수: {len(stocks)}개"
@@ -207,22 +258,27 @@ def monitoring_loop():
     global alert_threshold, check_interval
     print(f"🚀 감시 시작 (변동률 {alert_threshold}%, {check_interval}초 간격)")
     last_alert = {}
-
+    
     while True:
         try:
+            # ★ 장 마감이면 알림 체크 안 함
+            if not is_market_open():
+                time.sleep(30)  # 장 마감 중에는 30초마다만 깨어남
+                continue
+
             token = get_valid_token()
             for name, ticker in list(stocks.items()):
-                current_p, open_p = get_market_data(token, ticker)
+                current_p, open_p, high, low = get_market_data(token, ticker)
                 if open_p == 0:
                     continue
-
+                
                 change = (current_p - open_p) / open_p * 100
 
                 # 변동률 알림
                 if abs(change) >= alert_threshold:
                     key = f"{name}_{int(change)}"
-                    now = time.time()
-                    if key not in last_alert or now - last_alert[key] > 300:  # 5분 쿨타임
+                    now_ts = time.time()
+                    if key not in last_alert or now_ts - last_alert[key] > 300:
                         dir_str = "🔺 상승" if change > 0 else "🔻 하락"
                         send_telegram(
                             f"{dir_str} 알림!\n"
@@ -230,7 +286,7 @@ def monitoring_loop():
                             f"현재가: {current_p:,}원\n"
                             f"변동률: {change:+.2f}%"
                         )
-                        last_alert[key] = now
+                        last_alert[key] = now_ts
 
                 # 목표가 알림
                 if name in targets and current_p >= targets[name]:
