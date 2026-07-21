@@ -263,70 +263,32 @@ def monitoring_loop():
 
     while True:
         try:
+            print("🔍 감시 루프 실행 중...")   # ← 이 줄 추가
             now = datetime.datetime.now()
-            weekday = now.weekday()  # 0=월 ~ 4=금, 5=토, 6=일
+            weekday = now.weekday()
             hour = now.hour
             minute = now.minute
 
-            # ==================== 휴장일 체크 ====================
             is_weekend = weekday >= 5
             is_afterhours = (hour == 15 and minute >= 40) or (hour == 16 and minute < 5)
 
             if is_weekend:
-                time.sleep(60)  # 주말에는 1분마다만 체크 (자원 절약)
+                print("📅 주말이라 스킵")
+                time.sleep(60)
                 continue
 
             token = get_valid_token()
+            print(f"🔑 토큰 발급 성공: {token[:20]}...")   # 토큰 일부만 출력
 
             for name, ticker in list(stocks.items()):
                 current_p, open_p = get_market_data(token, ticker)
+                print(f"📈 {name}: 현재가={current_p}, 시가={open_p}")   # ← 이 줄 추가
 
-                # 시가(open_p)가 0이면 오늘은 장이 안 열린 날
                 if open_p == 0 and not is_afterhours:
+                    print(f"⚠️ {name} 시가 0 → 스킵")
                     continue
 
-                # ==================== 정규장 ====================
-                if not is_afterhours and open_p > 0:
-                    change = (current_p - open_p) / open_p * 100
-
-                    if abs(change) >= alert_threshold:
-                        key = f"regular_{name}_{int(change)}"
-                        now_ts = time.time()
-                        if key not in last_alert or now_ts - last_alert[key] > 300:
-                            dir_str = "🔺 상승" if change > 0 else "🔻 하락"
-                            send_telegram(
-                                f"{dir_str} [정규장]\n"
-                                f"<b>{name}</b>\n"
-                                f"현재가: {current_p:,}원\n"
-                                f"변동률: {change:+.2f}%"
-                            )
-                            last_alert[key] = now_ts
-
-                # ==================== 시외장 ====================
-                elif is_afterhours:
-                    key = f"after_{name}"
-                    now_ts = time.time()
-                    if key not in last_afterhours or now_ts - last_afterhours[key] > 300:  # 5분 간격
-                        send_telegram(
-                            f"🕒 [시외장]\n"
-                            f"<b>{name}</b>\n"
-                            f"현재가: {current_p:,}원"
-                        )
-                        last_afterhours[key] = now_ts
-
-                # 목표가 알림 (항상)
-                if name in targets and current_p >= targets[name]:
-                    t_key = f"target_{name}"
-                    if t_key not in last_alert or time.time() - last_alert[t_key] > 300:
-                        send_telegram(
-                            f"🎯 목표가 도달!\n"
-                            f"<b>{name}</b>\n"
-                            f"현재가: {current_p:,}원"
-                        )
-                        last_alert[t_key] = time.time()
-
-            time.sleep(check_interval)
-
+        
         except Exception as e:
             print(f"감시 루프 오류: {e}")
             time.sleep(10)
