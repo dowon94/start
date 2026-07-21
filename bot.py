@@ -66,9 +66,9 @@ def get_access_token():
     return res.json().get('access_token')
 
 def get_valid_token():
-    if 'current_token' not in globals() or globals().get('token_issue_date') != date.today():
+    if 'current_token' not in globals() or globals().get('token_issue_date') != datetime.date.today():
         globals()['current_token'] = get_access_token()
-        globals()['token_issue_date'] = date.today()
+        globals()['token_issue_date'] = datetime.date.today()
     return globals()['current_token']
 
 def get_market_data(token, ticker):
