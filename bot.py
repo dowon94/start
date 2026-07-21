@@ -1,11 +1,10 @@
 import requests
 import json
 import time
+import datetime
 import os
-import datetime, date, time as dtime
 from threading import Thread
 from difflib import get_close_matches
-from zoneinfo import ZoneInfo
 
 # ==================== 설정 ====================
 APP_KEY = os.getenv("APP_KEY")
