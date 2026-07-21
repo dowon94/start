@@ -2,7 +2,7 @@ import requests
 import json
 import time
 import os
-from datetime import datetime, date, time as dtime
+import datetime, date, time as dtime
 from threading import Thread
 from difflib import get_close_matches
 from zoneinfo import ZoneInfo
@@ -255,6 +255,7 @@ def telegram_listener():
 
 # ==================== 감시 루프 ====================
 # ==================== 감시 루프 (휴장일 완벽 처리) ====================
+# ==================== 감시 루프 (datetime 오류 수정 버전) ====================
 def monitoring_loop():
     global alert_threshold, check_interval
     print(f"🚀 감시 시작 (변동률 {alert_threshold}%, {check_interval}초 간격)")
@@ -264,7 +265,9 @@ def monitoring_loop():
     while True:
         try:
             print("🔍 감시 루프 실행 중...")
-            now = datetime.now()
+            
+            # 올바른 datetime 사용
+            now = datetime.datetime.now()
             weekday = now.weekday()
             hour = now.hour
             minute = now.minute
@@ -278,7 +281,7 @@ def monitoring_loop():
                 continue
 
             token = get_valid_token()
-            print(f"🔑 토큰 발급됨")
+            print(f"🔑 토큰 발급 성공")
 
             for name, ticker in list(stocks.items()):
                 current_p, open_p = get_market_data(token, ticker)
@@ -333,6 +336,7 @@ def monitoring_loop():
         except Exception as e:
             print(f"감시 루프 오류: {e}")
             time.sleep(10)
+            
 if __name__ == "__main__":
     Thread(target=telegram_listener, daemon=True).start()
     monitoring_loop()
