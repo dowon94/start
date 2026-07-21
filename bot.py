@@ -72,7 +72,6 @@ def get_valid_token():
     return globals()['current_token']
 
 def get_market_data(token, ticker):
-    """현재가 조회 (정규장 + 시간외 모두 가능)"""
     url = f"{URL}/uapi/domestic-stock/v1/quotations/inquire-price"
     headers = {
         "content-type": "application/json",
@@ -86,23 +85,14 @@ def get_market_data(token, ticker):
         "fid_input_iscd": ticker
     }
     try:
-        res = requests.get(url, headers=headers, params=params).json()['output']
-        current = int(res.get('stck_prpr', 0))
-        open_p = int(res.get('stck_oprc', 0))
-        high = int(res.get('stck_hgpr', 0))
-        low = int(res.get('stck_lwpr', 0))
-        return current, open_p, high, low
+        res = requests.get(url, headers=headers, params=params).json()
+        output = res.get('output', {})
+        current_p = int(output.get('stck_prpr', 0))
+        open_p = int(output.get('stck_oprc', 0))
+        return current_p, open_p
     except Exception as e:
         print(f"시세 조회 오류 ({ticker}): {e}")
-        return 0, 0, 0, 0
-
-def send_telegram(message):
-    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    requests.post(url, data={
-        'chat_id': CHAT_ID,
-        'text': message,
-        'parse_mode': 'HTML'
-    })
+        return 0, 0
 
 def find_ticker_by_name(name):
     matches = get_close_matches(name, stocks.keys(), n=3, cutoff=0.6)
