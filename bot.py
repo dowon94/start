@@ -5,6 +5,7 @@ import datetime
 import os
 from threading import Thread
 from difflib import get_close_matches
+from zoneinfo import ZoneInfo
 
 # ==================== 설정 ====================
 APP_KEY = os.getenv("APP_KEY")
