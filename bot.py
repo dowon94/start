@@ -94,6 +94,17 @@ def get_market_data(token, ticker):
         print(f"시세 조회 오류 ({ticker}): {e}")
         return 0, 0
 
+def send_telegram(message):
+    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+    try:
+        requests.post(url, data={
+            'chat_id': CHAT_ID,
+            'text': message,
+            'parse_mode': 'HTML'
+        })
+    except Exception as e:
+        print(f"텔레그램 전송 오류: {e}")
+        
 def find_ticker_by_name(name):
     matches = get_close_matches(name, stocks.keys(), n=3, cutoff=0.6)
     if matches:
