@@ -14,7 +14,6 @@ CHAT_ID = os.getenv("CHAT_ID")
 
 URL = "https://openapi.koreainvestment.com:9443"
 DATA_FILE = "stock_monitor.json"
-KST = ZoneInfo("Asia/Seoul")
 
 # ==================== 설정 변수 ====================
 alert_threshold = 2.0          # 변동률 기준 (%)
@@ -48,7 +47,7 @@ targets = data.get("targets", {})
 # ==================== 유틸 함수 ====================
 def is_market_open():
     """정규장 시간 체크 (평일 09:00 ~ 15:30)"""
-    now = datetime.now(KST)
+    now = datetime.datetime.now()
     if now.weekday() >= 5:  # 토, 일
         return False
     market_open = now.replace(hour=9, minute=0, second=0, microsecond=0)
